@@ -8,7 +8,7 @@ import (
 	"sync"
 
 	"github.com/pion/rtp"
-	"github.com/pion/webrtc/v2/pkg/media"
+	"github.com/pion/webrtc/v3/pkg/media"
 )
 
 const (
@@ -77,14 +77,22 @@ func (t *Track) Codec() *RTPCodec {
 	return t.codec
 }
 
+// Packetizer gets the Packetizer of the track
+func (t *Track) Packetizer() rtp.Packetizer {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return t.packetizer
+}
+
 // Read reads data from the track. If this is a local track this will error
 func (t *Track) Read(b []byte) (n int, err error) {
 	t.mu.RLock()
-	if len(t.activeSenders) != 0 {
+	r := t.receiver
+
+	if t.totalSenderCount != 0 || r == nil {
 		t.mu.RUnlock()
 		return 0, fmt.Errorf("this is a local track and must not be read from")
 	}
-	r := t.receiver
 	t.mu.RUnlock()
 
 	return r.readRTP(b)
@@ -150,7 +158,7 @@ func (t *Track) WriteRTP(p *rtp.Packet) error {
 	}
 
 	for _, s := range senders {
-		_, err := s.sendRTP(&p.Header, p.Payload)
+		_, err := s.SendRTP(&p.Header, p.Payload)
 		if err != nil {
 			return err
 		}

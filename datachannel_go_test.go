@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pion/datachannel"
 	"github.com/pion/logging"
 	"github.com/pion/transport/test"
 	"github.com/stretchr/testify/assert"
@@ -343,19 +344,24 @@ func TestEOF(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		defer func() { assert.NoError(t, pca.Close(), "should succeed") }()
-		defer func() { assert.NoError(t, pcb.Close(), "should succeed") }()
+		defer closePairNow(t, pca, pcb)
 
 		var wg sync.WaitGroup
 
-		dcChan := make(chan *DataChannel)
+		dcChan := make(chan datachannel.ReadWriteCloser)
 		pcb.OnDataChannel(func(dc *DataChannel) {
 			if dc.Label() != label {
 				return
 			}
 			log.Debug("OnDataChannel was called")
 			dc.OnOpen(func() {
-				dcChan <- dc
+				detached, err2 := dc.Detach()
+				if err2 != nil {
+					log.Debugf("Detach failed: %s\n", err2.Error())
+					t.Error(err2)
+				}
+
+				dcChan <- detached
 			})
 		})
 
@@ -366,17 +372,12 @@ func TestEOF(t *testing.T) {
 			var msg []byte
 
 			log.Debug("Waiting for OnDataChannel")
-			attached := <-dcChan
+			dc := <-dcChan
 			log.Debug("data channel opened")
-			dc, err2 := attached.Detach()
-			if err2 != nil {
-				log.Debugf("Detach failed: %s\n", err2.Error())
-				t.Error(err2)
-			}
 			defer func() { assert.NoError(t, dc.Close(), "should succeed") }()
 
 			log.Debug("Waiting for ping...")
-			msg, err2 = ioutil.ReadAll(dc)
+			msg, err2 := ioutil.ReadAll(dc)
 			log.Debugf("Received ping! \"%s\"\n", string(msg))
 			if err2 != nil {
 				t.Error(err2)
@@ -446,13 +447,12 @@ func TestEOF(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer func() { assert.NoError(t, pca.Close(), "should succeed") }()
-
 		pcb, err := api.NewPeerConnection(config)
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer func() { assert.NoError(t, pcb.Close(), "should succeed") }()
+
+		defer closePairNow(t, pca, pcb)
 
 		var dca, dcb *DataChannel
 		dcaClosedCh := make(chan struct{})

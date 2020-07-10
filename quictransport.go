@@ -13,11 +13,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pion/dtls"
+	"github.com/pion/dtls/v2/pkg/crypto/fingerprint"
 	"github.com/pion/logging"
 	"github.com/pion/quic"
-	"github.com/pion/webrtc/v2/internal/mux"
-	"github.com/pion/webrtc/v2/pkg/rtcerr"
+	"github.com/pion/webrtc/v3/internal/mux"
+	"github.com/pion/webrtc/v3/pkg/rtcerr"
 )
 
 // QUICTransport is a specialization of QuicTransportBase focused on
@@ -97,7 +97,6 @@ func (t *QUICTransport) Start(remoteParameters QUICParameters) error {
 		return err
 	}
 
-	// pion/webrtc#753
 	cert := t.certificates[0]
 
 	isClient := true
@@ -139,12 +138,12 @@ func (t *QUICTransport) Start(remoteParameters QUICParameters) error {
 
 func (t *QUICTransport) validateFingerPrint(remoteParameters QUICParameters, remoteCert *x509.Certificate) error {
 	for _, fp := range remoteParameters.Fingerprints {
-		hashAlgo, err := dtls.HashAlgorithmString(fp.Algorithm)
+		hashAlgo, err := fingerprint.HashFromString(fp.Algorithm)
 		if err != nil {
 			return err
 		}
 
-		remoteValue, err := dtls.Fingerprint(remoteCert, hashAlgo)
+		remoteValue, err := fingerprint.Fingerprint(remoteCert, hashAlgo)
 		if err != nil {
 			return err
 		}
